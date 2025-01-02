@@ -151,24 +151,10 @@ void checkRadar() {
         uint8_t gesture = buff[3]; // Gesture byte
         float distInMeters = range / 100.0; // cm > m
        
-        Serial.printf("Distance: %.2f m, Gesture: %d\n", distInMeters, gesture);
+        Serial.printf("Distance: %.2f m, Gesture: %d, Micro Motion: %d\n", distInMeters, gesture);
 
         if (gesture == 0x01) {
-          Serial.println("Gesture: Swipe Right");
-        } else if (gesture == 0x02) {
-          Serial.println("Gesture: Swipe Left");
-        } else if (gesture == 0x03) {
-          Serial.println("Gesture: Swipe Up");
-        } else if (gesture == 0x04) {
-          Serial.println("Gesture: Swipe Down");
-        } else if (gesture == 0x05) {
-          Serial.println("Gesture: Push");
-        } else if (gesture == 0x06) {
-          Serial.println("Gesture: Pull");
-        } else if (gesture == 0x07) {
-          Serial.println("Gesture: Circle Clockwise");
-        } else if (gesture == 0x08) {
-          Serial.println("Gesture: Circle Counter Clockwise");
+          Serial.println("Gesture");
         }
 
         memset(buff, 0, sizeof(buff));
