@@ -6,19 +6,33 @@
 
 HardwareSerial radarSerial(1);
 
+// static uint8_t enableCommand[] = {0xFD, 0xFC, 0xFB, 0xFA, 0x04, 0x00, 0xFF, 0x00, 0x01, 0x00, 0x04, 0x03};
+// static uint8_t disableCommand[] = {0xFD, 0xFC, 0xFB, 0xFA, 0x02, 0x00, 0xFE, 0x00, 0x04, 0x03, 0x02, 0x01};
+// static uint8_t firmwareCommand[] = {0xFD, 0xFC, 0xFB, 0xFA, 0x02, 0x00, 0x00, 0x00, 0x04, 0x03, 0x02, 0x01};
+
 void sendCommand(uint8_t *command, size_t length) {
   radarSerial.write(command, length);
 }
 
 void readFirmwareVersion() {
-  uint8_t command[] = {0xFD, 0xFC, 0xFB, 0xFA, 0x02, 0x00, 0x00, 0x00, 0x04, 0x03, 0x02, 0x01};
-  sendCommand(command, sizeof(command));
+  uint8_t firmwareCommand[] = {
+    0xFD, 0xFC, 0xFB, 0xFA, // Frame Header
+    0x02, 0x00, // Data Length (2 bytes follow)
+    0x00, 0x00, // Command Word
+    0x04, 0x03, 0x02, 0x01 // Frame Footer
+  };
 
+  sendCommand(firmwareCommand, sizeof(firmwareCommand));
   delay(100);
 
   bool versionReceived = false;
+
   while (radarSerial.available()) {
-    if (radarSerial.read() == 0xFD && radarSerial.read() == 0xFC && radarSerial.read() == 0xFB && radarSerial.read() == 0xFA) {
+    if (radarSerial.read() == 0xFD 
+     && radarSerial.read() == 0xFC 
+     && radarSerial.read() == 0xFB 
+     && radarSerial.read() == 0xFA) {
+
       radarSerial.read(); // Skip byte 1
       radarSerial.read(); // Skip byte 2
 
@@ -40,6 +54,88 @@ void readFirmwareVersion() {
   }
 }
 
+void setDistanceCalibration(int32_t calibrationValue) {
+  uint8_t enableCommand[] = {
+    0xFD, 0xFC, 0xFB, 0xFA, // Frame Header
+    0x04, 0x00, // Data Length (4 bytes follow)
+    0xFF, 0x00, // Command Word for Enable Configuration
+    0x01, 0x00, // End of Frame
+    0x04, 0x03, 0x02, 0x01 // Frame Footer
+  };
+  
+  sendCommand(enableCommand, sizeof(enableCommand));
+  delay(100);
+
+  Serial.print("Enabled Configurtion ACK:");
+  bool enableAckReceived = false;
+
+  while (radarSerial.available()) {
+    uint8_t byte = radarSerial.read();
+
+    if (byte == 0xFD && radarSerial.read() == 0xFC) {
+      enableAckReceived = true;
+      Serial.printf("0x%02X\n", byte);
+    } else if (enableAckReceived) {
+      Serial.printf("0x%02X\n", byte);
+      if (byte == 0x01) break;
+    }
+  }
+  Serial.println();
+
+  if (!enableAckReceived) {
+    Serial.println("Enable Configuration ACK not received");
+    return;
+  }
+
+  uint8_t calibrationCommand[] = {
+    0xFD, 0xFC, 0xFB, 0XFA, // Frame Header
+    0x08, 0x00, // Data Length (8 bytes follow)
+    0x72, 0x00, // Command Word for Distance Calibration
+    0x00, 0x00, // Distance Calibration Parameter Number
+    (uint8_t)(calibrationValue & 0xFF), // Calibration Value byte 1
+    (uint8_t)((calibrationValue >> 8) & 0xFF), // Calibration Value byte 2
+    (uint8_t)((calibrationValue >> 16) & 0xFF), // Calibration Value byte 3
+    (uint8_t)((calibrationValue >> 24) & 0xFF), // Calibration Value byte 4
+    0x04, 0x03, 0x02, 0x01 // Frame Footer
+  };
+
+  sendCommand(calibrationCommand, sizeof(calibrationCommand));
+  delay(100);
+
+  Serial.print("Distance Calibration ACK:");
+  bool calibrationAckReceived = false;
+
+  while (radarSerial.available()) {
+    uint8_t byte = radarSerial.read();
+    Serial.printf("0x%02X\n", byte);
+    
+    if (byte == 0x01) {
+      calibrationAckReceived = true;
+      break;
+    }
+  }
+
+  Serial.println();
+
+  if (calibrationAckReceived) {
+    Serial.println("Distance Calibration Command Successful");
+  } else {
+    Serial.println("Distance Calibration Command Failed");
+  }
+
+  uint8_t disableCommand[] = {
+    0xFD, 0xFC, 0xFB, 0xFA, // Frame Header
+    0x02, 0x00, // Data Length (2 bytes follow)
+    0xFE, 0x00, // Command Word for Disable Configuration
+    0x04, 0x03, 0x02, 0x01 // Frame Footer
+  };
+
+  sendCommand(disableCommand, sizeof(disableCommand));
+  delay(100);
+
+  Serial.print("Calibration Ended");
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial) {
@@ -49,9 +145,13 @@ void setup() {
 
   radarSerial.begin(256000, SERIAL_8N1, RX_PIN, TX_PIN);
   delay(1000);
+
+  readFirmwareVersion();
+  delay(1000);
+
+  setDistanceCalibration(100);
+  delay(4000);
 }
 
 void loop() {
-  readFirmwareVersion();
-  delay(1000);
 }
