@@ -6,9 +6,11 @@
 
 HardwareSerial radarSerial(1);
 
-// static uint8_t enableCommand[] = {0xFD, 0xFC, 0xFB, 0xFA, 0x04, 0x00, 0xFF, 0x00, 0x01, 0x00, 0x04, 0x03};
-// static uint8_t disableCommand[] = {0xFD, 0xFC, 0xFB, 0xFA, 0x02, 0x00, 0xFE, 0x00, 0x04, 0x03, 0x02, 0x01};
-// static uint8_t firmwareCommand[] = {0xFD, 0xFC, 0xFB, 0xFA, 0x02, 0x00, 0x00, 0x00, 0x04, 0x03, 0x02, 0x01};
+bool radarReady = false;
+bool targetInRange = false;
+uint8_t buff[64] = {0};
+uint8_t buffIndex = 0;
+uint16_t range;
 
 void sendCommand(uint8_t *command, size_t length) {
   radarSerial.write(command, length);
@@ -136,11 +138,55 @@ void setDistanceCalibration(int32_t calibrationValue) {
   Serial.print("Calibration Ended");
 }
 
+void checkRadar() {
+  while (radarSerial.available()) {
+    uint8_t byte = radarSerial.read();
+    buff[buffIndex++] = byte;
+
+    if (buffIndex >= 5) { // Min 5 bytes needed
+      if (buff[0] == 0xAA
+       && buff[buffIndex - 1] == 0x55) { // Extract Distance & Gesture
+
+        range = (buff[2] << 8) | buff[1]; // Distance bytes
+        uint8_t gesture = buff[3]; // Gesture byte
+        float distInMeters = range / 100.0; // cm > m
+       
+        Serial.printf("Distance: %.2f m, Gesture: %d\n", distInMeters, gesture);
+
+        if (gesture == 0x01) {
+          Serial.println("Gesture: Swipe Right");
+        } else if (gesture == 0x02) {
+          Serial.println("Gesture: Swipe Left");
+        } else if (gesture == 0x03) {
+          Serial.println("Gesture: Swipe Up");
+        } else if (gesture == 0x04) {
+          Serial.println("Gesture: Swipe Down");
+        } else if (gesture == 0x05) {
+          Serial.println("Gesture: Push");
+        } else if (gesture == 0x06) {
+          Serial.println("Gesture: Pull");
+        } else if (gesture == 0x07) {
+          Serial.println("Gesture: Circle Clockwise");
+        } else if (gesture == 0x08) {
+          Serial.println("Gesture: Circle Counter Clockwise");
+        }
+
+        memset(buff, 0, sizeof(buff));
+        buffIndex = 0;
+      } else {
+        if (buffIndex >= sizeof(buff)) {
+          memset(buff, 0, sizeof(buff));
+          buffIndex = 0;
+        }
+      }
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {
-    ;
-  }
+  while (!Serial) ;
+
   Serial.println("Radar Firmware Version Reader");
 
   radarSerial.begin(256000, SERIAL_8N1, RX_PIN, TX_PIN);
@@ -151,7 +197,10 @@ void setup() {
 
   setDistanceCalibration(100);
   delay(4000);
+
+  radarReady = true;
 }
 
 void loop() {
+  if (radarReady) checkRadar();
 }
